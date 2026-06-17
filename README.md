@@ -28,6 +28,8 @@ npm ci && npm run build && npm start
 
 **fork → PR → CI（`ci:pass`）→ マージ**。DM での個別許可は不要です。
 
+初めて Issue / PR / コメントをくれた方には、**絵文字リアクションだけ**自動で歓迎します（❤️ 🎉 🚀 など。本文での自動返信はしません）。
+
 → [CONTRIBUTING.md](CONTRIBUTING.md)
 
 ## ライセンス
