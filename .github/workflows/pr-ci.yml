@@ -1,0 +1,90 @@
+name: PR CI
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "mcp-servers/**"
+      - ".github/workflows/pr-ci.yml"
+      - "CONTRIBUTING.md"
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: pr-ci-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      wallet: ${{ steps.filter.outputs.wallet }}
+      toolkit: ${{ steps.filter.outputs.toolkit }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            wallet:
+              - 'mcp-servers/ft-wallet-mcp/**'
+            toolkit:
+              - 'mcp-servers/ft-agent-toolkit/**'
+
+  ft-wallet-mcp:
+    needs: changes
+    if: needs.changes.outputs.wallet == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mcp-servers/ft-wallet-mcp
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: mcp-servers/ft-wallet-mcp/package-lock.json
+      - run: npm ci && npm run build
+
+  ft-agent-toolkit:
+    needs: changes
+    if: needs.changes.outputs.toolkit == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mcp-servers/ft-agent-toolkit
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: mcp-servers/ft-agent-toolkit/package-lock.json
+      - run: npm ci && npm run build
+
+  label:
+    needs: [changes, ft-wallet-mcp, ft-agent-toolkit]
+    if: always() && github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Mark PR ready for review
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          PR="${{ github.event.pull_request.number }}"
+          WALLET="${{ needs.changes.outputs.wallet }}"
+          TOOLKIT="${{ needs.changes.outputs.toolkit }}"
+          WALLET_OK="${{ needs.ft-wallet-mcp.result }}"
+          TOOLKIT_OK="${{ needs.ft-agent-toolkit.result }}"
+          failed=0
+          if [ "$WALLET" = "true" ] && [ "$WALLET_OK" != "success" ]; then failed=1; fi
+          if [ "$TOOLKIT" = "true" ] && [ "$TOOLKIT_OK" != "success" ]; then failed=1; fi
+          if [ "$failed" -eq 0 ]; then
+            gh pr edit "$PR" --add-label "ci:pass" --remove-label "ci:fail" 2>/dev/null || gh pr edit "$PR" --add-label "ci:pass"
+          else
+            gh pr edit "$PR" --add-label "ci:fail" --remove-label "ci:pass" 2>/dev/null || gh pr edit "$PR" --add-label "ci:fail"
+            exit 1
+          fi

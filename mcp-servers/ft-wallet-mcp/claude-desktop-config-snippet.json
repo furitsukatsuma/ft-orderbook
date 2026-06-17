@@ -1,0 +1,12 @@
+{
+  "_comment": "Claude Desktop: mcpServers に追記。REPO_ROOT を自分の clone 先に置き換える",
+  "mcpServers": {
+    "ft-wallet-mcp": {
+      "command": "node",
+      "args": ["REPO_ROOT/mcp-servers/ft-wallet-mcp/dist/index.js"],
+      "env": {
+        "SLACK_WEBHOOK_URL": "https://hooks.slack.com/services/REPLACE/REPLACE/REPLACE"
+      }
+    }
+  }
+}

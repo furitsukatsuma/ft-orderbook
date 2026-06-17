@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>FT Orderbook — コードレビュー</title>
+  <style>
+    :root {
+      --bg-deep: #0a1610;
+      --bg-panel: #0f2418;
+      --bg-elev: #143224;
+      --border: #1b4332;
+      --accent: #2d6a4f;
+      --accent-bright: #40916c;
+      --text: #d8f3dc;
+      --text-muted: #95d5b2;
+      --sell: #ff6b6b;
+      --buy: #74c69d;
+      --warn: #f4a261;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: "SF Pro Text", "Hiragino Sans", system-ui, sans-serif;
+      background: linear-gradient(160deg, var(--bg-deep) 0%, #0d2818 50%, var(--bg-deep) 100%);
+      color: var(--text);
+    }
+    .wrap {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 1.25rem 1rem 2rem;
+    }
+    header {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 1rem;
+      margin-bottom: 1.25rem;
+      padding-bottom: 1rem;
+      border-bottom: 1px solid var(--border);
+    }
+    h1 {
+      margin: 0;
+      font-size: 1.35rem;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+    }
+    .sub {
+      margin: 0.35rem 0 0;
+      font-size: 0.8rem;
+      color: var(--text-muted);
+    }
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      align-items: center;
+    }
+    label { font-size: 0.75rem; color: var(--text-muted); }
+    select {
+      background: var(--bg-elev);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 0.4rem 0.6rem;
+      font-size: 0.85rem;
+    }
+    .status {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+    }
+    .status.err { color: var(--sell); }
+    .summary-bar {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 0.75rem;
+      margin-bottom: 1.25rem;
+    }
+    .stat {
+      background: var(--bg-panel);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 0.75rem 1rem;
+    }
+    .stat kbd {
+      display: block;
+      font-size: 0.7rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 0.25rem;
+    }
+    .stat strong {
+      font-size: 1.1rem;
+      color: var(--accent-bright);
+    }
+    .board {
+      display: grid;
+      grid-template-columns: 1fr minmax(160px, 0.45fr) 1fr;
+      gap: 0.75rem;
+      margin-bottom: 1.5rem;
+    }
+    @media (max-width: 900px) {
+      .board { grid-template-columns: 1fr; }
+    }
+    .col {
+      background: var(--bg-panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+      min-height: 320px;
+      display: flex;
+      flex-direction: column;
+    }
+    .col h2 {
+      margin: 0;
+      padding: 0.65rem 1rem;
+      font-size: 0.8rem;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      background: var(--bg-elev);
+      border-bottom: 1px solid var(--border);
+    }
+    .col.sell h2 { color: var(--sell); }
+    .col.buy h2 { color: var(--buy); }
+    .col.axis h2 { color: var(--warn); }
+    .col-body {
+      flex: 1;
+      padding: 0.5rem;
+      overflow: auto;
+      font-size: 0.82rem;
+      font-variant-numeric: tabular-nums;
+    }
+    .row {
+      display: grid;
+      grid-template-columns: 1fr auto auto;
+      gap: 0.5rem;
+      padding: 0.35rem 0.5rem;
+      border-radius: 6px;
+      align-items: center;
+    }
+    .row:nth-child(odd) { background: rgba(45, 106, 79, 0.12); }
+    .price { font-weight: 600; text-align: right; }
+    .qty { color: var(--text-muted); font-size: 0.78rem; text-align: right; }
+    .oid { font-size: 0.68rem; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; }
+    .axis-stack {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+      padding: 0.75rem;
+    }
+    .axis-item {
+      background: var(--bg-elev);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 0.75rem;
+      text-align: center;
+    }
+    .axis-item span { display: block; font-size: 0.7rem; color: var(--text-muted); margin-bottom: 0.25rem; }
+    .axis-item strong { font-size: 1.15rem; }
+    .empty {
+      padding: 2rem 1rem;
+      text-align: center;
+      color: var(--text-muted);
+      font-size: 0.85rem;
+    }
+    .form-section {
+      background: var(--bg-panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1rem 1.25rem 1.25rem;
+    }
+    .form-section h3 {
+      margin: 0 0 1rem;
+      font-size: 0.95rem;
+      color: var(--accent-bright);
+    }
+    .tabs {
+      display: flex;
+      gap: 0.25rem;
+      margin-bottom: 0.75rem;
+    }
+    .tabs button {
+      flex: 1;
+      padding: 0.5rem;
+      border: 1px solid var(--border);
+      background: var(--bg-elev);
+      color: var(--text-muted);
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 0.85rem;
+    }
+    .tabs button.active {
+      background: var(--accent);
+      color: #fff;
+      border-color: var(--accent-bright);
+    }
+    .tabs.side-sell button[data-side="sell"].active { background: rgba(255, 107, 107, 0.35); border-color: var(--sell); color: #fff; }
+    .tabs.side-buy button[data-side="buy"].active { background: rgba(116, 198, 157, 0.35); border-color: var(--buy); color: #fff; }
+    .grid2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.75rem;
+    }
+    @media (max-width: 600px) { .grid2 { grid-template-columns: 1fr; } }
+    .field { display: flex; flex-direction: column; gap: 0.25rem; }
+    .field input {
+      background: var(--bg-deep);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.5rem 0.65rem;
+      color: var(--text);
+      font-size: 0.9rem;
+    }
+    .field input:disabled { opacity: 0.45; }
+    .submit {
+      margin-top: 1rem;
+      width: 100%;
+      padding: 0.65rem;
+      border: none;
+      border-radius: 10px;
+      background: linear-gradient(135deg, var(--accent), #1b4332);
+      color: #fff;
+      font-weight: 600;
+      cursor: pointer;
+      font-size: 0.9rem;
+    }
+    .submit:hover { filter: brightness(1.08); }
+    .hint {
+      margin-top: 0.75rem;
+      font-size: 0.72rem;
+      color: var(--text-muted);
+      line-height: 1.45;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div>
+        <h1>FT Orderbook</h1>
+        <p class="sub" id="serviceLabel">service: コードレビュー · API: orderbook.ftai.uk</p>
+      </div>
+      <div class="toolbar">
+        <div>
+          <label for="currency">表示通貨</label><br />
+          <select id="currency" aria-label="表示通貨">
+            <option value="USD">USD</option>
+            <option value="JPY">JPY</option>
+            <option value="USDC">USDC</option>
+          </select>
+        </div>
+        <p class="status" id="status">読み込み中…</p>
+      </div>
+    </header>
+
+    <div class="summary-bar" id="summaryBar">
+      <div class="stat"><kbd>手数料収益 (fee)</kbd><strong id="feeRev">—</strong></div>
+      <div class="stat"><kbd>約定数 (matched)</kbd><strong id="matched">—</strong></div>
+      <div class="stat"><kbd>取引高 (gross / vol)</kbd><strong id="grossVol">—</strong></div>
+      <div class="stat"><kbd>売り注文数</kbd><strong id="sumSell">—</strong></div>
+      <div class="stat"><kbd>買い注文数</kbd><strong id="sumBuy">—</strong></div>
+    </div>
+
+    <div class="board">
+      <div class="col sell">
+        <h2>売り板</h2>
+        <div class="col-body" id="sellBody"></div>
+      </div>
+      <div class="col axis">
+        <h2>価格軸</h2>
+        <div class="col-body">
+          <div class="axis-stack">
+            <div class="axis-item">
+              <span>Best Ask（最良売値）</span>
+              <strong id="bestAsk">—</strong>
+            </div>
+            <div class="axis-item">
+              <span>Spread</span>
+              <strong id="spread">—</strong>
+            </div>
+            <div class="axis-item">
+              <span>Best Bid（最良買値）</span>
+              <strong id="bestBid">—</strong>
+            </div>
+            <div class="axis-item">
+              <span>手数料率 (API)</span>
+              <strong id="feeRate">—</strong>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="col buy">
+        <h2>買い板</h2>
+        <div class="col-body" id="buyBody"></div>
+      </div>
+    </div>
+
+    <section class="form-section" aria-labelledby="formTitle">
+      <h3 id="formTitle">注文入力（MCPは別途 · 送信は console.log のみ）</h3>
+      <div class="tabs side-sell" id="sideTabs" role="tablist">
+        <button type="button" data-side="sell" class="active" role="tab">売り</button>
+        <button type="button" data-side="buy" role="tab">買い</button>
+      </div>
+      <div class="tabs" id="typeTabs" role="tablist">
+        <button type="button" data-type="limit" class="active" role="tab">指値</button>
+        <button type="button" data-type="market" role="tab">成り行き</button>
+      </div>
+      <div class="grid2">
+        <div class="field">
+          <label for="price">価格（USD ベース換算前の入力は通貨に応じて換算）</label>
+          <input type="number" id="price" step="0.0001" min="0" placeholder="指値のみ必須" />
+        </div>
+        <div class="field">
+          <label for="qty">数量（UIメモ · MCP未対応）</label>
+          <input type="number" id="qty" step="1" min="1" value="1" />
+        </div>
+        <div class="field">
+          <label for="timeout">有効期限（分）timeout_minutes</label>
+          <input type="number" id="timeout" min="1" max="1440" value="60" />
+        </div>
+        <div class="field">
+          <label for="customerId">customer_id</label>
+          <input type="text" id="customerId" value="orderbook-ui-user" />
+        </div>
+      </div>
+      <button type="button" class="submit" id="submitBtn">wallet_place_order 相当を console に出力</button>
+      <p class="hint">
+        ブラウザの開発者ツール（Console）を開いてから押してください。<code>wallet_place_order</code> に渡す想定オブジェクトを出力します。CORS のため本ページは <code>python3 -m http.server</code> 等で同一オリジン相当で開くと確実です。
+      </p>
+    </section>
+  </div>
+
+  <script>
+    const API_BASE = "https://orderbook.ftai.uk";
+    const SERVICE = "コードレビュー";
+    const REFRESH_MS = 5000;
+
+    let lastRates = { USD: 1, JPY: 151, USDC: 1 };
+
+    function getCurrency() {
+      return document.getElementById("currency").value;
+    }
+
+    /** API の価格は USD ベースとみなし、選択通貨で表示 */
+    function formatMoney(usdPrice, rates) {
+      if (usdPrice == null || Number.isNaN(usdPrice)) return "—";
+      const c = getCurrency();
+      const r = rates[c] ?? 1;
+      if (c === "USD" || c === "USDC") {
+        const v = usdPrice * (c === "USDC" ? 1 : 1);
+        return `${c} ${v.toFixed(c === "USDC" ? 4 : 2)}`;
+      }
+      if (c === "JPY") {
+        return `JPY ${Math.round(usdPrice * r).toLocaleString("ja-JP")}`;
+      }
+      return String(usdPrice);
+    }
+
+    function parseInputPriceToUsd(raw, rates) {
+      const c = getCurrency();
+      const n = parseFloat(raw);
+      if (Number.isNaN(n)) return null;
+      const r = rates[c] ?? 1;
+      if (c === "JPY") return n / r;
+      return n;
+    }
+
+    function renderOrders(container, orders, rates, side) {
+      if (!orders || orders.length === 0) {
+        container.innerHTML = '<div class="empty">注文なし</div>';
+        return;
+      }
+      container.innerHTML = orders
+        .map(
+          (o) => `
+        <div class="row">
+          <span class="oid" title="${o.order_id}">${o.order_id}</span>
+          <span class="price">${formatMoney(o.price, rates)}</span>
+          <span class="qty">×${o.qty ?? 1}</span>
+        </div>
+        <div class="row" style="font-size:0.65rem;color:var(--text-muted);grid-template-columns:1fr;">
+          ${o.expires_at ?? ""}
+        </div>`
+        )
+        .join("");
+    }
+
+    function setStatus(ok, msg) {
+      const el = document.getElementById("status");
+      el.textContent = msg;
+      el.classList.toggle("err", !ok);
+    }
+
+    async function fetchOrderbook() {
+      const u = new URL(`${API_BASE}/orderbook`);
+      u.searchParams.set("service", SERVICE);
+      const res = await fetch(u.toString());
+      if (!res.ok) throw new Error(`orderbook ${res.status}`);
+      return res.json();
+    }
+
+    async function fetchSummary() {
+      const u = new URL(`${API_BASE}/summary`);
+      u.searchParams.set("service", SERVICE);
+      const res = await fetch(u.toString());
+      if (!res.ok) throw new Error(`summary ${res.status}`);
+      return res.json();
+    }
+
+    async function refresh() {
+      try {
+        const [ob, sm] = await Promise.all([fetchOrderbook(), fetchSummary()]);
+        const rates = ob.rates || lastRates;
+        lastRates = rates;
+
+        document.getElementById("bestAsk").textContent = formatMoney(ob.best_ask, rates);
+        document.getElementById("bestBid").textContent = formatMoney(ob.best_bid, rates);
+        document.getElementById("spread").textContent =
+          ob.spread != null ? String(ob.spread) : "—";
+        const fr = ob.fee_rate;
+        document.getElementById("feeRate").textContent =
+          fr != null ? `${(Number(fr) * 100).toFixed(3)}%` : "—";
+
+        renderOrders(document.getElementById("sellBody"), ob.sell_orders, rates, "sell");
+        renderOrders(document.getElementById("buyBody"), ob.buy_orders, rates, "buy");
+
+        const s = sm.summary || {};
+        document.getElementById("feeRev").textContent =
+          s.fee_revenue_usd != null ? `USD ${Number(s.fee_revenue_usd).toFixed(4)}` : "—";
+        document.getElementById("matched").textContent =
+          s.matched_count != null ? String(s.matched_count) : "—";
+        const vol =
+          s.gross_settlement_usd != null
+            ? s.gross_settlement_usd
+            : s.total_volume_usd;
+        document.getElementById("grossVol").textContent =
+          vol != null ? `USD ${Number(vol).toFixed(4)}` : "—";
+        document.getElementById("sumSell").textContent =
+          s.sell_count != null ? String(s.sell_count) : "—";
+        document.getElementById("sumBuy").textContent =
+          s.buy_count != null ? String(s.buy_count) : "—";
+
+        setStatus(true, `更新: ${new Date().toLocaleTimeString("ja-JP")}`);
+      } catch (e) {
+        console.error(e);
+        setStatus(false, `エラー: ${e.message}`);
+      }
+    }
+
+    /* タブ: 売り買い */
+    let side = "sell";
+    document.querySelectorAll("#sideTabs button").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        document.querySelectorAll("#sideTabs button").forEach((b) => b.classList.remove("active"));
+        btn.classList.add("active");
+        side = btn.dataset.side;
+        document.getElementById("sideTabs").className = "tabs side-" + side;
+      });
+    });
+
+    let type = "limit";
+    document.querySelectorAll("#typeTabs button").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        document.querySelectorAll("#typeTabs button").forEach((b) => b.classList.remove("active"));
+        btn.classList.add("active");
+        type = btn.dataset.type;
+        document.getElementById("price").disabled = type === "market";
+      });
+    });
+
+    document.getElementById("currency").addEventListener("change", () => refresh());
+
+    document.getElementById("submitBtn").addEventListener("click", () => {
+      const timeoutMinutes = parseInt(document.getElementById("timeout").value, 10);
+      const customerId = document.getElementById("customerId").value.trim() || "orderbook-ui-user";
+      const qty = parseInt(document.getElementById("qty").value, 10) || 1;
+      const priceRaw = document.getElementById("price").value;
+      const payload = {
+        tool: "wallet_place_order",
+        params: {
+          type,
+          side,
+          service: SERVICE,
+          timeout_minutes: timeoutMinutes,
+          customer_id: customerId,
+        },
+        ui_meta: { qty_note: qty, display_currency: getCurrency() },
+      };
+      if (type === "limit") {
+        const usd = parseInputPriceToUsd(priceRaw, lastRates);
+        if (usd == null || usd <= 0) {
+          console.warn("指値: 価格を入力してください（現在の表示通貨で）");
+          return;
+        }
+        payload.params.price = Math.round(usd * 10000) / 10000;
+      }
+      console.log("[orderbook-ui] wallet_place_order →", payload);
+    });
+
+    refresh();
+    setInterval(refresh, REFRESH_MS);
+  </script>
+</body>
+</html>
