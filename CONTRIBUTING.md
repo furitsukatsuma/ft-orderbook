@@ -27,6 +27,7 @@
 | ft-orderbook / wallet MCP | `mcp-servers/ft-wallet-mcp/` |
 | エージェント交渉ツール | `mcp-servers/ft-agent-toolkit/` |
 | クイックスタート | `docs/quickstart.md` |
+| Issue の書き方 | `docs/issues.md` |
 
 ## ローカル確認
 
@@ -46,6 +47,10 @@ npm ci && npm run build
 
 個人運用・Secrets・keep-alive などは [docs/WHAT-IS-NOT-HERE.md](docs/WHAT-IS-NOT-HERE.md) を参照。
 
-## 質問
+## 質問・要望・「使いにくい」など
 
-GitHub Issue でどうぞ（緊急でなければ DM 不要）。
+**GitHub Issue でどうぞ**（DM 不要）。
+
+- 例: 「色が見えない」「使いにくい」「こうしてほしい」
+- 書き方: [docs/issues.md](docs/issues.md)
+- コードまで直す人 → 上の PR フローへ

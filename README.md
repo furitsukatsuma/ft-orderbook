@@ -24,6 +24,8 @@ npm ci && npm run build && npm start
 
 詳細: [docs/quickstart.md](docs/quickstart.md)
 
+要望・バグ・「使いにくい」は [Issues](https://github.com/furitsukatsuma/ft-orderbook/issues) へ（[書き方](docs/issues.md)）。
+
 ## 協力する
 
 **fork → PR → CI（`ci:pass`）→ マージ**。DM での個別許可は不要です。
