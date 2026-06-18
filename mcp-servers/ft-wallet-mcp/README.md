@@ -50,12 +50,30 @@ npm start          # MCP stdio
 
 | 変数 | 用途 |
 |------|------|
-| `SLACK_WEBHOOK_URL` | FT 承認通知（wallet human_auth） |
+| `NOTIFY_WEBHOOK_URL` | 汎用 Webhook 通知（Slack / Discord / 任意）。承認待ち・約定・レンジ更新を通知 |
 | `SUPABASE_URL` / `SUPABASE_SERVICE_KEY` | HTTP API・本番板 |
 | `VALID_API_KEYS` | HTTP API の `x-api-key`（カンマ区切り） |
 | `FT_WALLET_HTTP_PORT` | HTTP ポート（既定 3099） |
+| `FT_WALLET_DB_PATH` | SQLite 保存先（省略可） |
 
-実値は **`.env` のみ**。Git にコミットしない。
+実値は **`.env` のみ**。Git にコミットしない。秘密はサーバ側だけに置き、クライアントへ出さない。
+
+## 約定モデル（人間の金額レンジ + 認証付き承認）
+
+口座主（人間）が **自律約定レンジ `[min, max]`** を決め、その範囲内のマッチは AI が自律で約定します。範囲外は **人間の承認**が必要です。
+
+```
+注文がマッチ
+  ├─ 約定価格が [min, max] 内 → 自律約定（settled_by=auto）+ 通知
+  └─ 範囲外 → PENDING_APPROVAL（両注文を保留）
+        → Webhook へ承認トークンを通知
+        → 人間が wallet_approve_settlement(order_id, token) で確定
+           （トークン一致 = 人間認証。settled_by=human:<id>）
+```
+
+- **レンジ未設定なら全件が人間承認**（安全側デフォルト）。
+- 承認トークンは **通知先（Webhook）にのみ**送られ、AI への応答には出ません。
+- 板はデータ保存のみ。入力はホワイトリスト整形＋プレースホルダSQLで、**不正コードは混入しません**。
 
 ## MCP ツール一覧
 
@@ -63,10 +81,14 @@ npm start          # MCP stdio
 
 | ツール | 説明 |
 |--------|------|
-| `wallet_place_order` | 指値 / 成り行き注文 |
+| `wallet_place_order` | 指値 / 成り行き注文（マッチ時にレンジ判定） |
 | `wallet_check_order` | ステータス確認 |
 | `wallet_cancel_order` | キャンセル |
 | `wallet_get_orderbook` | 板表示 |
+| `wallet_set_auto_settle_band` | 自律約定レンジ `[min,max]` を設定（人間が決める） |
+| `wallet_get_auto_settle_band` | 現在のレンジ・約定モード確認 |
+| `wallet_approve_settlement` | レンジ外マッチをトークン認証で承認・確定 |
+| `wallet_reject_settlement` | レンジ外マッチを却下し板へ戻す |
 
 ### Wallet
 
