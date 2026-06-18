@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>FT Orderbook — 板ビュー（デモ）</title>
+  <style>
+    :root {
+      --bg-deep: #0a1610;
+      --bg-panel: #0f2418;
+      --bg-elev: #143224;
+      --border: #1b4332;
+      --accent: #2d6a4f;
+      --accent-bright: #40916c;
+      --text: #d8f3dc;
+      --text-muted: #95d5b2;
+      --sell: #ff6b6b;
+      --buy: #74c69d;
+      --warn: #f4a261;
+      --pending: #ffd166;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: "SF Pro Text", "Hiragino Sans", system-ui, sans-serif;
+      background: radial-gradient(1200px 600px at 50% -10%, #103022 0%, transparent 60%),
+                  linear-gradient(160deg, var(--bg-deep) 0%, #0d2818 50%, var(--bg-deep) 100%);
+      color: var(--text);
+    }
+    .wrap { max-width: 1200px; margin: 0 auto; padding: 1.25rem 1rem 3rem; }
+    header {
+      display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between;
+      gap: 1rem; margin-bottom: 1.25rem; padding-bottom: 1rem; border-bottom: 1px solid var(--border);
+    }
+    h1 { margin: 0; font-size: 1.4rem; font-weight: 700; letter-spacing: 0.02em; }
+    .sub { margin: 0.35rem 0 0; font-size: 0.8rem; color: var(--text-muted); }
+    .toolbar { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: center; }
+    label { font-size: 0.75rem; color: var(--text-muted); }
+    select, .btn {
+      background: var(--bg-elev); color: var(--text); border: 1px solid var(--border);
+      border-radius: 6px; padding: 0.4rem 0.7rem; font-size: 0.85rem; cursor: pointer;
+    }
+    .btn:hover { border-color: var(--accent-bright); }
+    .status { font-size: 0.75rem; color: var(--text-muted); }
+    .status.err { color: var(--sell); }
+    .pill { display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.7rem;
+      padding: 0.15rem 0.5rem; border-radius: 999px; border: 1px solid var(--border); }
+    .pill.demo { color: var(--warn); border-color: var(--warn); }
+    .pill.live { color: var(--buy); border-color: var(--buy); }
+
+    /* 自律約定レンジ */
+    .band {
+      background: linear-gradient(135deg, rgba(64,145,108,0.18), rgba(20,50,36,0.4));
+      border: 1px solid var(--accent); border-radius: 14px; padding: 1rem 1.25rem;
+      margin-bottom: 1.25rem; display: flex; flex-wrap: wrap; gap: 1rem 2rem; align-items: center;
+    }
+    .band h2 { margin: 0; font-size: 0.95rem; color: var(--accent-bright); }
+    .band .range { font-size: 1.3rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+    .band .note { font-size: 0.74rem; color: var(--text-muted); }
+    .legend { display: flex; gap: 1rem; flex-wrap: wrap; font-size: 0.72rem; color: var(--text-muted); }
+    .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 0.3rem; }
+    .dot.auto { background: var(--buy); }
+    .dot.pending { background: var(--pending); }
+    .dot.outband { background: var(--sell); }
+
+    .summary-bar { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 0.75rem; margin-bottom: 1.25rem; }
+    .stat { background: var(--bg-panel); border: 1px solid var(--border); border-radius: 10px; padding: 0.75rem 1rem; }
+    .stat kbd { display: block; font-size: 0.68rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 0.25rem; }
+    .stat strong { font-size: 1.1rem; color: var(--accent-bright); font-variant-numeric: tabular-nums; }
+
+    .board { display: grid; grid-template-columns: 1fr minmax(170px, 0.5fr) 1fr; gap: 0.75rem; margin-bottom: 1.5rem; }
+    @media (max-width: 900px) { .board { grid-template-columns: 1fr; } }
+    .col { background: var(--bg-panel); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; min-height: 300px; display: flex; flex-direction: column; }
+    .col h2 { margin: 0; padding: 0.65rem 1rem; font-size: 0.78rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; background: var(--bg-elev); border-bottom: 1px solid var(--border); }
+    .col.sell h2 { color: var(--sell); }
+    .col.buy h2 { color: var(--buy); }
+    .col.axis h2 { color: var(--warn); }
+    .col-body { flex: 1; padding: 0.5rem; overflow: auto; font-size: 0.82rem; font-variant-numeric: tabular-nums; }
+    .row { display: grid; grid-template-columns: 1fr auto auto; gap: 0.5rem; padding: 0.4rem 0.5rem; border-radius: 6px; align-items: center; position: relative; }
+    .row.inband { box-shadow: inset 3px 0 0 var(--buy); }
+    .row.outband { box-shadow: inset 3px 0 0 var(--sell); }
+    .row:nth-child(odd) { background: rgba(45, 106, 79, 0.12); }
+    .price { font-weight: 700; text-align: right; }
+    .qty { color: var(--text-muted); font-size: 0.78rem; text-align: right; }
+    .oid { font-size: 0.68rem; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .meta { font-size: 0.64rem; color: var(--text-muted); grid-column: 1 / -1; padding: 0 0.5rem 0.2rem; }
+    .axis-stack { display: flex; flex-direction: column; gap: 0.6rem; padding: 0.6rem; }
+    .axis-item { background: var(--bg-elev); border: 1px solid var(--border); border-radius: 10px; padding: 0.6rem; text-align: center; }
+    .axis-item span { display: block; font-size: 0.66rem; color: var(--text-muted); margin-bottom: 0.2rem; }
+    .axis-item strong { font-size: 1.1rem; }
+    .empty { padding: 2rem 1rem; text-align: center; color: var(--text-muted); font-size: 0.85rem; }
+
+    section.block { background: var(--bg-panel); border: 1px solid var(--border); border-radius: 12px; padding: 1rem 1.25rem 1.25rem; margin-bottom: 1.25rem; }
+    section.block h3 { margin: 0 0 0.85rem; font-size: 0.95rem; color: var(--accent-bright); display: flex; align-items: center; gap: 0.5rem; }
+    .count-badge { font-size: 0.7rem; color: var(--bg-deep); background: var(--pending); border-radius: 999px; padding: 0.05rem 0.5rem; font-weight: 700; }
+
+    .pending-card { border: 1px solid var(--pending); background: rgba(255,209,102,0.08); border-radius: 10px; padding: 0.75rem 0.9rem; margin-bottom: 0.6rem; display: flex; flex-wrap: wrap; gap: 0.5rem 1rem; align-items: center; justify-content: space-between; }
+    .pending-card .pi { display: flex; flex-direction: column; }
+    .pending-card .pi span { font-size: 0.64rem; color: var(--text-muted); }
+    .pending-card .pi b { font-size: 0.9rem; font-variant-numeric: tabular-nums; }
+    .actions { display: flex; gap: 0.5rem; }
+    .approve { background: var(--accent); color: #fff; border-color: var(--accent-bright); }
+    .reject { background: rgba(255,107,107,0.2); color: #fff; border-color: var(--sell); }
+
+    table { width: 100%; border-collapse: collapse; font-size: 0.8rem; font-variant-numeric: tabular-nums; }
+    th, td { text-align: left; padding: 0.45rem 0.6rem; border-bottom: 1px solid var(--border); }
+    th { color: var(--text-muted); font-weight: 600; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; }
+    .badge { font-size: 0.66rem; padding: 0.1rem 0.45rem; border-radius: 999px; border: 1px solid; }
+    .badge.auto { color: var(--buy); border-color: var(--buy); }
+    .badge.human { color: var(--pending); border-color: var(--pending); }
+    .foot { font-size: 0.72rem; color: var(--text-muted); line-height: 1.5; margin-top: 0.5rem; }
+    code { background: var(--bg-deep); padding: 0.1rem 0.35rem; border-radius: 4px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div>
+        <h1>FT Orderbook — 板ビュー</h1>
+        <p class="sub" id="serviceLabel">service: コードレビュー · <span id="srcPill" class="pill demo">DEMO データ</span></p>
+      </div>
+      <div class="toolbar">
+        <div>
+          <label for="dataSource">データソース</label><br />
+          <select id="dataSource" aria-label="データソース">
+            <option value="demo">デモ（サンプル表示）</option>
+            <option value="live">ライブ API</option>
+          </select>
+        </div>
+        <div>
+          <label for="currency">表示通貨</label><br />
+          <select id="currency" aria-label="表示通貨">
+            <option value="USD">USD</option>
+            <option value="JPY">JPY</option>
+            <option value="USDC">USDC</option>
+          </select>
+        </div>
+        <button class="btn" id="refreshBtn" type="button">↻ 更新</button>
+        <p class="status" id="status">—</p>
+      </div>
+    </header>
+
+    <!-- 自律約定レンジ -->
+    <div class="band">
+      <div>
+        <h2>自律約定レンジ（人間が設定）</h2>
+        <div class="range" id="bandRange">—</div>
+        <div class="note" id="bandNote">範囲内は AI が自律約定 / 範囲外は人間の承認が必要</div>
+      </div>
+      <div class="legend">
+        <span><span class="dot auto"></span>レンジ内＝自律約定</span>
+        <span><span class="dot outband"></span>レンジ外＝承認が必要</span>
+        <span><span class="dot pending"></span>承認待ち（保留中）</span>
+      </div>
+    </div>
+
+    <div class="summary-bar" id="summaryBar">
+      <div class="stat"><kbd>手数料収益 (fee)</kbd><strong id="feeRev">—</strong></div>
+      <div class="stat"><kbd>約定数 (matched)</kbd><strong id="matched">—</strong></div>
+      <div class="stat"><kbd>取引高 (gross / vol)</kbd><strong id="grossVol">—</strong></div>
+      <div class="stat"><kbd>売り注文数</kbd><strong id="sumSell">—</strong></div>
+      <div class="stat"><kbd>買い注文数</kbd><strong id="sumBuy">—</strong></div>
+    </div>
+
+    <div class="board">
+      <div class="col sell">
+        <h2>売り板 (asks)</h2>
+        <div class="col-body" id="sellBody"></div>
+      </div>
+      <div class="col axis">
+        <h2>価格軸</h2>
+        <div class="col-body">
+          <div class="axis-stack">
+            <div class="axis-item"><span>Best Ask（最良売値）</span><strong id="bestAsk">—</strong></div>
+            <div class="axis-item"><span>Spread</span><strong id="spread">—</strong></div>
+            <div class="axis-item"><span>Best Bid（最良買値）</span><strong id="bestBid">—</strong></div>
+            <div class="axis-item"><span>手数料率</span><strong id="feeRate">—</strong></div>
+          </div>
+        </div>
+      </div>
+      <div class="col buy">
+        <h2>買い板 (bids)</h2>
+        <div class="col-body" id="buyBody"></div>
+      </div>
+    </div>
+
+    <!-- 承認待ち -->
+    <section class="block">
+      <h3>🔐 人間の承認待ち <span class="count-badge" id="pendingCount">0</span></h3>
+      <div id="pendingList"></div>
+      <p class="foot">レンジ外でマッチした注文です。承認トークンは通知先（Webhook）に届きます。
+        実運用では <code>wallet_approve_settlement(order_id, token)</code> で確定します（このデモのボタンはログ出力のみ）。</p>
+    </section>
+
+    <!-- 約定履歴 -->
+    <section class="block">
+      <h3>📒 最近の約定</h3>
+      <table>
+        <thead>
+          <tr><th>service</th><th>price</th><th>fee</th><th>約定方法</th><th>時刻</th></tr>
+        </thead>
+        <tbody id="tradesBody"></tbody>
+      </table>
+    </section>
+
+    <p class="foot">
+      これは単体で開けるデモ表示です（サーバ不要）。<b>ライブ API</b> に切り替えると <code>orderbook.ftai.uk</code> の実データを取得します（CORS 上、ローカルでは <code>python3 -m http.server</code> 等で開くと確実）。
+    </p>
+  </div>
+
+  <script>
+    const API_BASE = "https://orderbook.ftai.uk";
+    const SERVICE = "コードレビュー";
+    let lastRates = { USD: 1, JPY: 151, USDC: 1 };
+
+    // ── デモ用サンプルデータ（新仕様: レンジ・承認待ち・settled_by を反映）──
+    const DEMO = {
+      auto_settle_band: { min: 0, max: 100 },
+      rates: { USD: 1, JPY: 151, USDC: 1 },
+      best_ask: 42, best_bid: 38, spread: 4, fee_rate: 0.01975,
+      sell_orders: [
+        { order_id: "ord-l8x2a-Q1", price: 42, qty: 1, expires_at: "2026-06-18 06:10:00" },
+        { order_id: "ord-l8x4c-R7", price: 55, qty: 1, expires_at: "2026-06-18 07:00:00" },
+        { order_id: "ord-l8x9f-Z3", price: 120, qty: 1, expires_at: "2026-06-18 08:30:00" },
+      ],
+      buy_orders: [
+        { order_id: "ord-l8y1b-M4", price: 38, qty: 1, expires_at: "2026-06-18 06:25:00" },
+        { order_id: "ord-l8y6d-K9", price: 30, qty: 1, expires_at: "2026-06-18 07:15:00" },
+      ],
+      pending: [
+        { order_id: "ord-l8z3p-A2", matched_with: "ord-l8z3p-B8", price: 500, side: "buy", created_at: "2026-06-18 05:58" },
+      ],
+      summary: { fee_revenue_usd: 3.2415, matched_count: 5, gross_settlement_usd: 164.0, sell_count: 3, buy_count: 2 },
+      trades: [
+        { service: "コードレビュー", price: 42, fee_usd: 0.8295, settled_by: "auto", traded_at: "06:02" },
+        { service: "コードレビュー", price: 30, fee_usd: 0.5925, settled_by: "auto", traded_at: "05:40" },
+        { service: "設計レビュー", price: 800, fee_usd: 15.8, settled_by: "human:furitsuka", traded_at: "04:55" },
+        { service: "翻訳", price: 22, fee_usd: 0.4345, settled_by: "auto", traded_at: "04:20" },
+      ],
+    };
+
+    const $ = (id) => document.getElementById(id);
+    const getCurrency = () => $("currency").value;
+    const getSource = () => $("dataSource").value;
+
+    function fmt(usd, rates) {
+      if (usd == null || Number.isNaN(usd)) return "—";
+      const c = getCurrency(); const r = rates[c] ?? 1;
+      if (c === "JPY") return `JPY ${Math.round(usd * r).toLocaleString("ja-JP")}`;
+      return `${c} ${usd.toFixed(c === "USDC" ? 4 : 2)}`;
+    }
+    function inBand(price, band) { return band && price >= band.min && price <= band.max; }
+
+    function setStatus(ok, msg) { const el = $("status"); el.textContent = msg; el.classList.toggle("err", !ok); }
+
+    function renderBand(band) {
+      if (!band) { $("bandRange").textContent = "未設定"; $("bandNote").textContent = "未設定 → すべて人間承認（安全側デフォルト）"; return; }
+      $("bandRange").textContent = `${fmt(band.min, lastRates)}  〜  ${fmt(band.max, lastRates)}`;
+      $("bandNote").textContent = "範囲内は AI が自律約定 / 範囲外は人間の承認が必要";
+    }
+
+    function renderOrders(container, orders, rates, band) {
+      if (!orders || orders.length === 0) { container.innerHTML = '<div class="empty">注文なし</div>'; return; }
+      container.innerHTML = orders.map((o) => {
+        const cls = band ? (inBand(o.price, band) ? "inband" : "outband") : "";
+        return `<div class="row ${cls}">
+          <span class="oid" title="${o.order_id}">${o.order_id}</span>
+          <span class="price">${fmt(o.price, rates)}</span>
+          <span class="qty">×${o.qty ?? 1}</span>
+          <span class="meta">期限: ${o.expires_at ?? "—"} · ${band ? (inBand(o.price, band) ? "自律約定対象" : "承認が必要") : ""}</span>
+        </div>`;
+      }).join("");
+    }
+
+    function renderPending(list, rates) {
+      $("pendingCount").textContent = String(list ? list.length : 0);
+      const box = $("pendingList");
+      if (!list || list.length === 0) { box.innerHTML = '<div class="empty">承認待ちはありません</div>'; return; }
+      box.innerHTML = list.map((p) => `
+        <div class="pending-card">
+          <div class="pi"><span>order_id</span><b>${p.order_id}</b></div>
+          <div class="pi"><span>約定価格</span><b>${fmt(p.price, rates)}</b></div>
+          <div class="pi"><span>対向</span><b>${p.matched_with}</b></div>
+          <div class="pi"><span>受付</span><b>${p.created_at}</b></div>
+          <div class="actions">
+            <button class="btn approve" data-id="${p.order_id}" type="button">承認</button>
+            <button class="btn reject" data-id="${p.order_id}" type="button">却下</button>
+          </div>
+        </div>`).join("");
+      box.querySelectorAll(".approve").forEach((b) => b.onclick = () =>
+        console.log("[demo] wallet_approve_settlement →", { order_id: b.dataset.id, token: "<通知のトークン>", approver_id: "furitsuka" }));
+      box.querySelectorAll(".reject").forEach((b) => b.onclick = () =>
+        console.log("[demo] wallet_reject_settlement →", { order_id: b.dataset.id, token: "<通知のトークン>", approver_id: "furitsuka" }));
+    }
+
+    function renderTrades(trades) {
+      const tb = $("tradesBody");
+      if (!trades || trades.length === 0) { tb.innerHTML = '<tr><td colspan="5" class="empty">約定なし</td></tr>'; return; }
+      tb.innerHTML = trades.map((t) => {
+        const human = String(t.settled_by || "auto").startsWith("human");
+        return `<tr>
+          <td>${t.service}</td>
+          <td>${fmt(t.price, lastRates)}</td>
+          <td>USD ${Number(t.fee_usd).toFixed(4)}</td>
+          <td><span class="badge ${human ? "human" : "auto"}">${human ? "人間承認" : "自律"}</span></td>
+          <td>${t.traded_at}</td>
+        </tr>`;
+      }).join("");
+    }
+
+    function paint(d) {
+      lastRates = d.rates || lastRates;
+      renderBand(d.auto_settle_band);
+      $("bestAsk").textContent = fmt(d.best_ask, lastRates);
+      $("bestBid").textContent = fmt(d.best_bid, lastRates);
+      $("spread").textContent = d.spread != null ? String(d.spread) : "—";
+      $("feeRate").textContent = d.fee_rate != null ? `${(Number(d.fee_rate) * 100).toFixed(3)}%` : "—";
+      renderOrders($("sellBody"), d.sell_orders, lastRates, d.auto_settle_band);
+      renderOrders($("buyBody"), d.buy_orders, lastRates, d.auto_settle_band);
+      renderPending(d.pending || [], lastRates);
+      renderTrades(d.trades || []);
+      const s = d.summary || {};
+      $("feeRev").textContent = s.fee_revenue_usd != null ? `USD ${Number(s.fee_revenue_usd).toFixed(4)}` : "—";
+      $("matched").textContent = s.matched_count != null ? String(s.matched_count) : "—";
+      const vol = s.gross_settlement_usd ?? s.total_volume_usd;
+      $("grossVol").textContent = vol != null ? `USD ${Number(vol).toFixed(4)}` : "—";
+      $("sumSell").textContent = s.sell_count != null ? String(s.sell_count) : "—";
+      $("sumBuy").textContent = s.buy_count != null ? String(s.buy_count) : "—";
+    }
+
+    async function loadLive() {
+      const ob = await (await fetch(new URL(`${API_BASE}/orderbook?service=${encodeURIComponent(SERVICE)}`))).json();
+      let summary = {};
+      try { summary = (await (await fetch(new URL(`${API_BASE}/summary?service=${encodeURIComponent(SERVICE)}`))).json()).summary || {}; } catch {}
+      return { ...ob, summary, pending: ob.pending || [], trades: ob.trades || [] };
+    }
+
+    async function refresh() {
+      const src = getSource();
+      $("srcPill").className = "pill " + src;
+      $("srcPill").textContent = src === "live" ? "LIVE データ" : "DEMO データ";
+      if (src === "demo") { paint(DEMO); setStatus(true, "デモ表示（サンプルデータ）"); return; }
+      try { setStatus(true, "取得中…"); const d = await loadLive(); paint(d); setStatus(true, `更新: ${new Date().toLocaleTimeString("ja-JP")}`); }
+      catch (e) { console.error(e); setStatus(false, `ライブ取得エラー: ${e.message}（デモに切替推奨）`); }
+    }
+
+    $("dataSource").addEventListener("change", refresh);
+    $("currency").addEventListener("change", refresh);
+    $("refreshBtn").addEventListener("click", refresh);
+    refresh();
+  </script>
+</body>
+</html>

@@ -24,6 +24,8 @@ npm ci && npm run build && npm start
 
 詳細: [docs/quickstart.md](docs/quickstart.md)
 
+はじめての方は [かんたん使い方ガイド](docs/usage.ja.md)（レンジ設定・人間承認・通知・板の見方）もどうぞ。
+
 要望・バグ・「使いにくい」は [Issues](https://github.com/furitsukatsuma/ft-orderbook/issues) へ（[書き方](docs/issues.md)）。
 
 ## 協力する
