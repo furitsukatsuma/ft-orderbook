@@ -3,7 +3,7 @@
 
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
-export type OrderStatus = "OPEN" | "MATCHED" | "CANCELLED" | "EXPIRED";
+export type OrderStatus = "OPEN" | "MATCHED" | "CANCELLED" | "EXPIRED" | "PENDING_APPROVAL";
 export type OrderSide = "buy" | "sell";
 
 export type OrderRow = {
@@ -67,7 +67,7 @@ export async function expireOrders(): Promise<void> {
   const { error } = await db
     .from("orders")
     .update({ status: "EXPIRED" })
-    .eq("status", "OPEN")
+    .in("status", ["OPEN", "PENDING_APPROVAL"])
     .lte("expires_at", nowIso());
   if (error) throw new Error(error.message);
 }

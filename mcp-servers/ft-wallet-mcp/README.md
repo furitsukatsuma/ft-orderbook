@@ -17,24 +17,35 @@ FT AI Convenience Store 向け **MCP サーバー**。
 
 ```
 src/
-  index.ts          # MCP stdio エントリ（ツール登録）
-  http-server.ts    # REST API + Webhook（Supabase）
-  sqlite-db.ts      # MCP orderbook 用 SQLite
-  db.ts             # Supabase クライアント（HTTP 用）
+  index.ts                     # MCP stdio エントリ（ツール登録・backend 選択）
+  http-server.ts               # REST API + Webhook（Supabase 読み取り）
+  sqlite-db.ts                 # MCP orderbook 用 SQLite
+  db.ts                        # Supabase クライアント（HTTP 用）
+  backends/orderbook.ts        # 板ツールの backend 切替（supabase|sqlite）
+  shared/orderbook-supabase.ts # 共有約定ロジック（Supabase 版・正本）
   tools/
-    wallet.ts       # 決済・領収書ツール
-    orderbook.ts    # 板ツール（SQLite）
-supabase/schema.sql # 本番 DB スキーマ（orders / trades）
+    wallet.ts                  # 決済・領収書ツール
+    orderbook.ts               # 板ツール（SQLite 実装）
+    orderbook-schemas.ts       # 板ツールの zod スキーマ（backend 非依存）
+supabase/
+  schema.sql                   # 新規構築用スキーマ（orders/trades/settings）
+  migrations/0001_*.sql        # 既存からの冪等 ALTER 移行
 ```
 
-### データ正本（現状）
+### データ正本（バックエンド切替）
 
-| 経路 | 保存 |
-|------|------|
-| MCP `wallet_*` orderbook ツール | SQLite |
-| HTTP API / 本番 UI | Supabase |
+MCP の板ツールは **env でバックエンドを切り替え**ます。既存のローカル stdio（SQLite）利用は壊れません。
 
-→ **将来は Supabase 一本化を推奨**（[`docs/products/ft-orderbook.md`](../../docs/products/ft-orderbook.md) 参照）
+| `FT_WALLET_BACKEND` | 条件 | 保存先 |
+|------|------|------|
+| `supabase` | 明示指定 | Supabase（要 `SUPABASE_URL`+`SUPABASE_SERVICE_KEY`） |
+| `sqlite` | 明示指定 | SQLite（従来） |
+| 未指定 | `SUPABASE_URL`+`SUPABASE_SERVICE_KEY` あり | Supabase |
+| 未指定 | 上記なし | SQLite（フォールバック） |
+
+管理UI（[orderbook-admin](../../products/orderbook-admin/README.md)）は **同じ Supabase テーブル**を、`src/shared/orderbook-supabase.ts` の**同じ共有ロジック**で R/W します（手数料率 1.975% も一致）。Supabase スキーマ適用は [`supabase/README.md`](supabase/README.md) 参照。
+
+ロジックの単体検証: `npm run smoke`（認証不要・インメモリ Fake でシナリオ検証）。
 
 ## セットアップ
 
@@ -51,7 +62,8 @@ npm start          # MCP stdio
 | 変数 | 用途 |
 |------|------|
 | `NOTIFY_WEBHOOK_URL` | 汎用 Webhook 通知（Slack / Discord / 任意）。承認待ち・約定・レンジ更新を通知 |
-| `SUPABASE_URL` / `SUPABASE_SERVICE_KEY` | HTTP API・本番板 |
+| `FT_WALLET_BACKEND` | 板ツールの保存先 `supabase` / `sqlite`（未指定は SUPABASE_* 有無で自動判定） |
+| `SUPABASE_URL` / `SUPABASE_SERVICE_KEY` | Supabase バックエンド・HTTP API・本番板 |
 | `VALID_API_KEYS` | HTTP API の `x-api-key`（カンマ区切り） |
 | `FT_WALLET_HTTP_PORT` | HTTP ポート（既定 3099） |
 | `FT_WALLET_DB_PATH` | SQLite 保存先（省略可） |

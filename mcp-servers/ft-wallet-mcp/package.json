@@ -7,7 +7,8 @@
   "scripts": {
     "build": "tsc",
     "start": "node dist/index.js",
-    "dev": "tsc --watch"
+    "dev": "tsc --watch",
+    "smoke": "tsc && node dist/shared/orderbook-supabase.smoke.js"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0",
