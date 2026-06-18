@@ -106,14 +106,130 @@ npm start          # MCP stdio
 - 応答は JSON テキスト（パースしやすい）
 - [`ai-agent-sql-cheatsheet.sql`](ai-agent-sql-cheatsheet.sql) — SQL を書けるモデル向け
 
-### 接続例（Claude Desktop）
+## MCP クライアント接続ガイド（共通）
 
-[`claude-desktop-config-snippet.json`](claude-desktop-config-snippet.json) を編集し、**`args` のパスを自分の clone 先に変更**してください。
+本サーバは **stdio** で起動する MCP サーバーです。各クライアントには共通して次を指定します。
+
+- **コマンド**: `node`
+- **引数**: ビルド済みエントリ `dist/index.js` の**絶対パス**
+  （= `<REPO_ROOT>/mcp-servers/ft-wallet-mcp/dist/index.js`）
+- **環境変数**: 通知を使うなら `NOTIFY_WEBHOOK_URL`（Slack/Discord/任意の Webhook URL）
+  - 承認トークンはこの通知先にのみ届きます。秘密はサーバ側のみ。クライアントUIへは出しません。
+
+### 0. 事前にビルド（必須）
+
+```bash
+cd <REPO_ROOT>/mcp-servers/ft-wallet-mcp
+cp .env.example .env        # NOTIFY_WEBHOOK_URL を設定（任意）
+npm ci
+npm run build               # → dist/index.js を生成
+```
+
+> `<REPO_ROOT>` は clone 先（例: `~/ft-work/ft-automation`）。パスはすべて絶対パスで指定してください。
+
+### 1. Claude Desktop
+
+`claude_desktop_config.json`（macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`）
+
+```json
+{
+  "mcpServers": {
+    "ft-wallet-mcp": {
+      "command": "node",
+      "args": ["<REPO_ROOT>/mcp-servers/ft-wallet-mcp/dist/index.js"],
+      "env": {
+        "NOTIFY_WEBHOOK_URL": "https://hooks.slack.com/services/XXX/YYY/ZZZ"
+      }
+    }
+  }
+}
+```
+
+同梱の [`claude-desktop-config-snippet.json`](claude-desktop-config-snippet.json) も利用できます。
+
+### 2. Cursor
+
+`~/.cursor/mcp.json`（プロジェクト単位なら `<project>/.cursor/mcp.json`）
+
+```json
+{
+  "mcpServers": {
+    "ft-wallet-mcp": {
+      "command": "node",
+      "args": ["<REPO_ROOT>/mcp-servers/ft-wallet-mcp/dist/index.js"],
+      "env": { "NOTIFY_WEBHOOK_URL": "https://hooks.slack.com/services/XXX/YYY/ZZZ" }
+    }
+  }
+}
+```
+
+### 3. GPT 系（OpenAI Agents SDK / 対応クライアント）
+
+stdio MCP サーバとして登録します（Python の Agents SDK 例）。
+
+```python
+from agents.mcp import MCPServerStdio
+
+ft_wallet = MCPServerStdio(
+    params={
+        "command": "node",
+        "args": ["<REPO_ROOT>/mcp-servers/ft-wallet-mcp/dist/index.js"],
+        "env": {"NOTIFY_WEBHOOK_URL": "https://hooks.slack.com/services/XXX/YYY/ZZZ"},
+    }
+)
+# agent = Agent(name="buyer", mcp_servers=[ft_wallet], ...)
+```
+
+> 注: ChatGPT デスクトップ等で「コネクタ/MCP」を直接登録できる場合も、コマンドは `node`、
+> 引数は `dist/index.js` の絶対パスで同じです。HTTP 専用クライアントには
+> [後述の汎用方法](#5-汎用-mcp-クライアントhttp-が必要な場合)を使ってください。
+
+### 4. Gemini 系（Gemini CLI / 対応クライアント）
+
+Gemini CLI の `settings.json`（`~/.gemini/settings.json`）に `mcpServers` を追加:
+
+```json
+{
+  "mcpServers": {
+    "ft-wallet-mcp": {
+      "command": "node",
+      "args": ["<REPO_ROOT>/mcp-servers/ft-wallet-mcp/dist/index.js"],
+      "env": { "NOTIFY_WEBHOOK_URL": "https://hooks.slack.com/services/XXX/YYY/ZZZ" }
+    }
+  }
+}
+```
+
+### 5. 汎用 MCP クライアント / HTTP が必要な場合
+
+- **stdio 対応クライアント**: 上記と同様に `command=node` / `args=[dist/index.js 絶対パス]` を渡します。
+- **stdio を直接話せないクライアント**: `mcp-remote` などのブリッジを挟みます。
+
+```jsonc
+{
+  "mcpServers": {
+    "ft-wallet-mcp": {
+      "command": "node",
+      "args": ["<REPO_ROOT>/mcp-servers/ft-wallet-mcp/dist/index.js"],
+      "env": { "NOTIFY_WEBHOOK_URL": "https://hooks.slack.com/services/XXX/YYY/ZZZ" }
+    }
+  }
+}
+```
+
+### 接続後の最小チェック
+
+1. クライアントのツール一覧に `wallet_*`（`wallet_place_order` など）が出ること。
+2. `wallet_get_auto_settle_band` を実行 → レンジ未設定なら「すべて人間承認」が返る。
+3. `wallet_set_auto_settle_band({min,max,operator_id})` でレンジ設定 → 範囲外マッチで
+   `NOTIFY_WEBHOOK_URL` に承認トークンが届くこと。
+4. ブラウザから承認/却下したい場合は [orderbook-admin 管理UI](../../products/orderbook-admin/README.md) を使用。
 
 ## 関連パッケージ
 
 - [ft-agent-toolkit](../ft-agent-toolkit/SKILL.md) — 購入前の意図確認・交渉 Layer
-- [orderbook UI](../../products/orderbook-ui/README.md) — 静的フロント
+- [orderbook UI](../../products/orderbook-ui/README.md) — 静的フロント（板表示）
+- [orderbook-admin](../../products/orderbook-admin/README.md) — 口座主向け管理UI（レンジ設定・承認/却下。Astro SSR）
 
 ## 未完成メモ
 
